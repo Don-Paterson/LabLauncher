@@ -3,13 +3,10 @@
 # Usage:  irm https://raw.githubusercontent.com/Don-Paterson/LabLauncher/main/run-lab-setup.ps1 | iex
 #
 # Presents a flat checklist of available scripts. Toggle items by number,
-# then press Enter to run them sequentially (default) or in parallel (-Parallel).
+# then press Enter to run. If 2+ scripts are selected, prompts for
+# sequential or parallel execution.
 #
 # Adding a new script: append an entry to the $Scripts array below.
-
-param(
-    [switch]$Parallel
-)
 
 # ── Script registry ──────────────────────────────────────────────────────────
 # Each entry: Name (menu label), Desc (one-liner), Url (irm target)
@@ -133,12 +130,19 @@ if ($toRun.Count -eq 0) {
     return
 }
 
-$mode = if ($Parallel) { 'PARALLEL' } else { 'SEQUENTIAL' }
+# Ask about parallel only when it makes sense (2+ scripts)
+$runParallel = $false
+if ($toRun.Count -gt 1) {
+    $pChoice = (Read-Host '  Run in parallel? [y/N]').Trim()
+    if ($pChoice -eq 'y' -or $pChoice -eq 'Y') { $runParallel = $true }
+}
+
+$mode = if ($runParallel) { 'PARALLEL' } else { 'SEQUENTIAL' }
 Write-Host ''
 Write-Host "  Running $($toRun.Count) script(s) [$mode]..." -ForegroundColor Cyan
 Write-Host '  ────────────────────────────────────────────' -ForegroundColor DarkGray
 
-if ($Parallel) {
+if ($runParallel) {
     # Launch each in its own PowerShell process
     $jobs = @()
     foreach ($script in $toRun) {
