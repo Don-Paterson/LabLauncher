@@ -2,11 +2,14 @@
 # Master launcher for Check Point lab automation scripts.
 # Usage:  irm https://raw.githubusercontent.com/Don-Paterson/LabLauncher/main/run-lab-setup.ps1 | iex
 #
-# Presents a flat checklist of available scripts. Toggle items by number,
-# then press Enter to run. If 2+ scripts are selected, prompts for
-# sequential or parallel execution.
+# WinForms GUI: tick the scripts you want, optionally check "Run in parallel",
+# then click Run. Sequential mode shows progress in the output pane.
+# Parallel mode launches each script in its own PowerShell window.
 #
 # Adding a new script: append an entry to the $Scripts array below.
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
 # ── Script registry ──────────────────────────────────────────────────────────
 # Each entry: Name (menu label), Desc (one-liner), Url (irm target)
@@ -38,148 +41,169 @@ $Scripts = @(
     }
 )
 
-# ── Colours & helpers ────────────────────────────────────────────────────────
-function Write-Header {
-    Write-Host ''
-    Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor Cyan
-    Write-Host '  ║        Check Point Lab Setup Launcher            ║' -ForegroundColor Cyan
-    Write-Host '  ╚══════════════════════════════════════════════════╝' -ForegroundColor Cyan
-    Write-Host ''
+# ── Build UI ─────────────────────────────────────────────────────────────────
+$form = New-Object System.Windows.Forms.Form
+$form.Text = 'Check Point Lab Setup Launcher'
+$form.Size = New-Object System.Drawing.Size(620, 520)
+$form.StartPosition = 'CenterScreen'
+$form.FormBorderStyle = 'FixedDialog'
+$form.MaximizeBox = $false
+
+# Script checklist label
+$lblScripts = New-Object System.Windows.Forms.Label
+$lblScripts.Text = 'Select scripts to run:'
+$lblScripts.Location = New-Object System.Drawing.Point(12, 12)
+$lblScripts.AutoSize = $true
+$lblScripts.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+$form.Controls.Add($lblScripts)
+
+# Checklist — shows "Name - Desc" for each script
+$clb = New-Object System.Windows.Forms.CheckedListBox
+$clb.Location = New-Object System.Drawing.Point(12, 36)
+$clb.Size = New-Object System.Drawing.Size(580, 175)
+$clb.CheckOnClick = $true
+$clb.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+foreach ($s in $Scripts) {
+    [void]$clb.Items.Add("$($s.Name)  —  $($s.Desc)")
 }
+$form.Controls.Add($clb)
 
-function Show-Menu {
-    param([bool[]]$Selected)
+# Select All / Select None buttons
+$btnAll = New-Object System.Windows.Forms.Button
+$btnAll.Text = 'Select All'
+$btnAll.Location = New-Object System.Drawing.Point(12, 218)
+$btnAll.Size = New-Object System.Drawing.Size(90, 28)
+$form.Controls.Add($btnAll)
+$btnAll.Add_Click({
+    for ($i = 0; $i -lt $clb.Items.Count; $i++) { $clb.SetItemChecked($i, $true) }
+})
 
-    for ($i = 0; $i -lt $Scripts.Count; $i++) {
-        $marker = if ($Selected[$i]) { '[X]' } else { '[ ]' }
-        $color  = if ($Selected[$i]) { 'Green' } else { 'Gray' }
-        Write-Host "  $marker " -ForegroundColor $color -NoNewline
-        Write-Host "$($i + 1). " -ForegroundColor White -NoNewline
-        Write-Host "$($Scripts[$i].Name)" -ForegroundColor Yellow -NoNewline
-        Write-Host " - $($Scripts[$i].Desc)" -ForegroundColor DarkGray
+$btnNone = New-Object System.Windows.Forms.Button
+$btnNone.Text = 'Select None'
+$btnNone.Location = New-Object System.Drawing.Point(110, 218)
+$btnNone.Size = New-Object System.Drawing.Size(90, 28)
+$form.Controls.Add($btnNone)
+$btnNone.Add_Click({
+    for ($i = 0; $i -lt $clb.Items.Count; $i++) { $clb.SetItemChecked($i, $false) }
+})
+
+# Parallel checkbox
+$chkParallel = New-Object System.Windows.Forms.CheckBox
+$chkParallel.Text = 'Run in parallel (each script in its own window)'
+$chkParallel.Location = New-Object System.Drawing.Point(14, 256)
+$chkParallel.AutoSize = $true
+$chkParallel.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+$form.Controls.Add($chkParallel)
+
+# Run and Close buttons
+$btnRun = New-Object System.Windows.Forms.Button
+$btnRun.Text = 'Run'
+$btnRun.Location = New-Object System.Drawing.Point(12, 286)
+$btnRun.Size = New-Object System.Drawing.Size(100, 32)
+$btnRun.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+$form.Controls.Add($btnRun)
+
+$btnClose = New-Object System.Windows.Forms.Button
+$btnClose.Text = 'Close'
+$btnClose.Location = New-Object System.Drawing.Point(120, 286)
+$btnClose.Size = New-Object System.Drawing.Size(80, 32)
+$form.Controls.Add($btnClose)
+$btnClose.Add_Click({ $form.Close() })
+
+# Output log
+$lblOutput = New-Object System.Windows.Forms.Label
+$lblOutput.Text = 'Output:'
+$lblOutput.Location = New-Object System.Drawing.Point(12, 326)
+$lblOutput.AutoSize = $true
+$lblOutput.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+$form.Controls.Add($lblOutput)
+
+$txtOutput = New-Object System.Windows.Forms.TextBox
+$txtOutput.Location = New-Object System.Drawing.Point(12, 348)
+$txtOutput.Size = New-Object System.Drawing.Size(580, 125)
+$txtOutput.Multiline = $true
+$txtOutput.ScrollBars = 'Vertical'
+$txtOutput.ReadOnly = $true
+$txtOutput.Font = New-Object System.Drawing.Font('Consolas', 9)
+$form.Controls.Add($txtOutput)
+
+# ── Run logic ────────────────────────────────────────────────────────────────
+$btnRun.Add_Click({
+    # Collect selected scripts
+    $toRun = @()
+    for ($i = 0; $i -lt $clb.Items.Count; $i++) {
+        if ($clb.GetItemChecked($i)) { $toRun += $Scripts[$i] }
     }
-    Write-Host ''
-    Write-Host '  Commands:  ' -NoNewline -ForegroundColor DarkGray
-    Write-Host '<number>' -ForegroundColor White -NoNewline
-    Write-Host ' toggle  |  ' -ForegroundColor DarkGray -NoNewline
-    Write-Host 'A' -ForegroundColor White -NoNewline
-    Write-Host ' select all  |  ' -ForegroundColor DarkGray -NoNewline
-    Write-Host 'N' -ForegroundColor White -NoNewline
-    Write-Host ' select none  |  ' -ForegroundColor DarkGray -NoNewline
-    Write-Host 'Enter' -ForegroundColor White -NoNewline
-    Write-Host ' run  |  ' -ForegroundColor DarkGray -NoNewline
-    Write-Host 'Q' -ForegroundColor White -NoNewline
-    Write-Host ' quit' -ForegroundColor DarkGray
-    Write-Host ''
-}
 
-# ── Main menu loop ───────────────────────────────────────────────────────────
-$selected = [bool[]]::new($Scripts.Count)
-
-Clear-Host
-Write-Header
-
-while ($true) {
-    Show-Menu -Selected $selected
-
-    $input_raw = Read-Host '  Selection'
-    $choice = $input_raw.Trim()
-
-    if ($choice -eq 'Q' -or $choice -eq 'q') {
-        Write-Host '  Cancelled.' -ForegroundColor DarkGray
+    if ($toRun.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show(
+            'Please select at least one script.',
+            'Nothing selected',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
         return
     }
-    if ($choice -eq 'A' -or $choice -eq 'a') {
-        for ($i = 0; $i -lt $selected.Count; $i++) { $selected[$i] = $true }
-        Clear-Host; Write-Header; continue
-    }
-    if ($choice -eq 'N' -or $choice -eq 'n') {
-        for ($i = 0; $i -lt $selected.Count; $i++) { $selected[$i] = $false }
-        Clear-Host; Write-Header; continue
-    }
-    if ($choice -eq '') {
-        # Enter pressed — run selected scripts
-        break
-    }
 
-    # Toggle by number (supports "1 3 5" or "1,3,5" or just "2")
-    $nums = $choice -split '[,\s]+' | Where-Object { $_ -match '^\d+$' }
-    $valid = $false
-    foreach ($n in $nums) {
-        $idx = [int]$n - 1
-        if ($idx -ge 0 -and $idx -lt $Scripts.Count) {
-            $selected[$idx] = -not $selected[$idx]
-            $valid = $true
+    # Disable UI while running
+    $btnRun.Enabled      = $false
+    $btnClose.Enabled    = $false
+    $btnAll.Enabled      = $false
+    $btnNone.Enabled     = $false
+    $clb.Enabled         = $false
+    $chkParallel.Enabled = $false
+
+    $txtOutput.Clear()
+    $txtOutput.AppendText("Starting at $([DateTime]::Now)`r`n")
+    $txtOutput.AppendText("Scripts: $($toRun.ForEach({ $_.Name }) -join ', ')`r`n`r`n")
+
+    if ($chkParallel.Checked) {
+        # ── Parallel: each in its own window ──
+        $jobs = @()
+        foreach ($s in $toRun) {
+            $txtOutput.AppendText("Launching: $($s.Name)`r`n")
+            $jobs += Start-Process powershell.exe -ArgumentList @(
+                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+                "irm '$($s.Url)' | iex; Write-Host ''; Write-Host 'Press any key to close...'; `$null = `$Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')"
+            ) -PassThru
         }
+        $txtOutput.AppendText("`r`n$($jobs.Count) window(s) launched. Close them when done.`r`n")
     }
-    if (-not $valid) {
-        Write-Host "  Invalid input: '$choice'" -ForegroundColor Red
-    }
-    Clear-Host
-    Write-Header
-}
+    else {
+        # ── Sequential: run in current session ──
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $successes = 0
+        $failures  = 0
 
-# ── Execution ────────────────────────────────────────────────────────────────
-$toRun = @()
-for ($i = 0; $i -lt $Scripts.Count; $i++) {
-    if ($selected[$i]) { $toRun += $Scripts[$i] }
-}
-
-if ($toRun.Count -eq 0) {
-    Write-Host '  Nothing selected.' -ForegroundColor DarkGray
-    return
-}
-
-# Ask about parallel only when it makes sense (2+ scripts)
-$runParallel = $false
-if ($toRun.Count -gt 1) {
-    $pChoice = (Read-Host '  Run in parallel? [y/N]').Trim()
-    if ($pChoice -eq 'y' -or $pChoice -eq 'Y') { $runParallel = $true }
-}
-
-$mode = if ($runParallel) { 'PARALLEL' } else { 'SEQUENTIAL' }
-Write-Host ''
-Write-Host "  Running $($toRun.Count) script(s) [$mode]..." -ForegroundColor Cyan
-Write-Host '  ────────────────────────────────────────────' -ForegroundColor DarkGray
-
-if ($runParallel) {
-    # Launch each in its own PowerShell process
-    $jobs = @()
-    foreach ($script in $toRun) {
-        Write-Host "  Starting: $($script.Name)" -ForegroundColor Yellow
-        $jobs += Start-Process powershell.exe -ArgumentList @(
-            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
-            "irm '$($script.Url)' | iex"
-        ) -PassThru
-    }
-    Write-Host ''
-    Write-Host "  $($jobs.Count) process(es) launched." -ForegroundColor Green
-    Write-Host '  Each runs in its own window. Close them when done.' -ForegroundColor DarkGray
-}
-else {
-    # Sequential — run each in the current session
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $successes = 0
-    $failures  = 0
-
-    foreach ($script in $toRun) {
-        Write-Host ''
-        Write-Host "  ▶ $($script.Name)" -ForegroundColor Yellow
-        Write-Host "    $($script.Url)" -ForegroundColor DarkGray
-        try {
-            $scriptContent = Invoke-RestMethod -Uri $script.Url -UseBasicParsing -ErrorAction Stop
-            Invoke-Expression $scriptContent
-            $successes++
-            Write-Host "  ✓ $($script.Name) completed." -ForegroundColor Green
+        foreach ($s in $toRun) {
+            $txtOutput.AppendText(">> $($s.Name)`r`n")
+            $form.Refresh()
+            try {
+                $scriptContent = Invoke-RestMethod -Uri $s.Url -UseBasicParsing -ErrorAction Stop
+                Invoke-Expression $scriptContent
+                $successes++
+                $txtOutput.AppendText("   OK`r`n`r`n")
+            }
+            catch {
+                $failures++
+                $txtOutput.AppendText("   FAILED: $_`r`n`r`n")
+            }
+            $form.Refresh()
         }
-        catch {
-            $failures++
-            Write-Host "  ✗ $($script.Name) FAILED: $_" -ForegroundColor Red
-        }
+
+        $stopwatch.Stop()
+        $elapsed = [math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
+        $txtOutput.AppendText("Done. $successes succeeded, $failures failed. [${elapsed}s]`r`n")
     }
 
-    $stopwatch.Stop()
-    Write-Host ''
-    Write-Host '  ════════════════════════════════════════════' -ForegroundColor Cyan
-    Write-Host "  Done. $successes succeeded, $failures failed. [$([math]::Round($stopwatch.Elapsed.TotalSeconds, 1))s]" -ForegroundColor Cyan
-}
+    # Re-enable UI
+    $btnRun.Enabled      = $true
+    $btnClose.Enabled    = $true
+    $btnAll.Enabled      = $true
+    $btnNone.Enabled     = $true
+    $clb.Enabled         = $true
+    $chkParallel.Enabled = $true
+})
+
+# ── Show ─────────────────────────────────────────────────────────────────────
+[void]$form.ShowDialog()

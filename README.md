@@ -1,6 +1,6 @@
 # LabLauncher
 
-Single entry point for all Check Point lab automation scripts. Run one command at the start of a Skillable lab session and pick what to set up from a console menu.
+Single entry point for all Check Point lab automation scripts. Run one command at the start of a Skillable lab session, tick the scripts you want, and click Run.
 
 ## Quick start
 
@@ -10,16 +10,15 @@ Open any PowerShell session:
 irm https://raw.githubusercontent.com/Don-Paterson/LabLauncher/main/run-lab-setup.ps1 | iex
 ```
 
-A numbered checklist appears. Toggle items by number, press Enter, and the selected scripts run.
+A GUI window appears with a checklist of available scripts. Tick the ones you need, optionally check "Run in parallel", and click **Run**.
 
 ## What it does
 
-1. Presents a flat checklist of available automation scripts
-2. Toggle individual items by number (`1`, `3`, `5`), comma-separated (`1,3,5`), or space-separated (`1 3 5`)
-3. `A` selects all, `N` clears all, `Q` quits
-4. Press Enter to run — if two or more scripts are selected, prompts `Run in parallel? [y/N]`
-5. Sequential mode runs each script in the current session with success/failure tracking and elapsed time
-6. Parallel mode launches each script in its own PowerShell window via `Start-Process`
+1. Presents a WinForms checklist of all registered automation scripts
+2. **Select All** / **Select None** buttons for quick toggling
+3. **Run in parallel** checkbox — launches each selected script in its own PowerShell window
+4. Sequential mode (default) runs each script in the current session with success/failure tracking and elapsed time
+5. Output pane shows real-time progress
 
 ## Available scripts
 
@@ -43,22 +42,11 @@ Append an entry to the `$Scripts` array in `run-lab-setup.ps1`:
 }
 ```
 
-No other changes needed — the menu rebuilds from the array automatically.
+No other changes needed — the checklist rebuilds from the array automatically.
 
 ## Typical lab workflow
 
-On **RDP-HOST** at lab start, run the launcher and select UK Locale Setup and SmartConsole Cleanup in parallel. Five minutes later on **A-GUI**, run the launcher again and select SmartConsole Cleanup, MobaXterm Install, chkp-monitor Deploy, and Plink Automation sequentially.
-
-## Menu controls
-
-| Key | Action |
-|-----|--------|
-| `1`–`5` | Toggle individual script |
-| `1,3,5` or `1 3 5` | Toggle multiple scripts |
-| `A` | Select all |
-| `N` | Select none |
-| `Enter` | Run selected scripts |
-| `Q` | Quit |
+On **RDP-HOST** at lab start, run the launcher and tick UK Locale Setup and SmartConsole Cleanup, check "Run in parallel", and click Run. Five minutes later on **A-GUI**, run the launcher again and tick SmartConsole Cleanup, MobaXterm Install, chkp-monitor Deploy, and Plink Automation, then run sequentially.
 
 ## Requirements
 
