@@ -159,10 +159,12 @@ $btnRun.Add_Click({
 
     if ($chkParallel.Checked) {
         # ── Parallel: each in its own window ──
+        # Use the same PS edition that launched us (pwsh.exe or powershell.exe)
+        $psExe = (Get-Process -Id $PID).Path
         $jobs = @()
         foreach ($s in $toRun) {
             $txtOutput.AppendText("Launching: $($s.Name)`r`n")
-            $jobs += Start-Process powershell.exe -ArgumentList @(
+            $jobs += Start-Process $psExe -ArgumentList @(
                 '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
                 "irm '$($s.Url)' | iex; Write-Host ''; Write-Host 'Press any key to close...'; `$null = `$Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')"
             ) -PassThru
