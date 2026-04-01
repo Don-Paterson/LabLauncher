@@ -42,7 +42,7 @@ $Scripts = @(
 function Write-Header {
     Write-Host ''
     Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor Cyan
-    Write-Host '  ║        Check Point Lab Setup Launcher           ║' -ForegroundColor Cyan
+    Write-Host '  ║        Check Point Lab Setup Launcher            ║' -ForegroundColor Cyan
     Write-Host '  ╚══════════════════════════════════════════════════╝' -ForegroundColor Cyan
     Write-Host ''
 }
