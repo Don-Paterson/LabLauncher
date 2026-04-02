@@ -37,7 +37,7 @@ $Scripts = @(
     @{
         Name = 'Plink Automation Runner'
         Desc = 'GUI tool for running clish commands across lab gateways via plink'
-        Url  = 'https://raw.githubusercontent.com/Don-Paterson/Plink-Automation/main/run-plink-automation.ps1'
+        Url  = 'https://raw.githubusercontent.com/Don-Paterson/Plink-Automation/main/Automation-Commands-Plink.ps1'
     }
 )
 
